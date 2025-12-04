@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  # ==================== FRONTEND ====================
+  librechat:
+    image: ghcr.io/danny-avila/librechat-dev:latest
+    container_name: librechat
+    ports:
+      - "3080:3080"
+    env_file:
+      - .env
+    environment:
+      - HOST=0.0.0.0
+      - MONGO_URI=mongodb://mongodb:27017/librechat
+      - CONFIG_PATH=/app/librechat.yaml
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+    depends_on:
+      - mongodb
+      - api
+    volumes:
+      - ./librechat.yaml:/app/librechat.yaml
+      - ./data/librechat:/app/client/public/images
+    restart: unless-stopped
+
+  # ==================== API GATEWAY ====================
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: enterprise-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - MONGO_URI=mongodb://mongodb:27017/enterprise_rag
+      - QDRANT_URL=http://qdrant:6333
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+    volumes:
+      - ./apps/api/src:/app/src
+      - ./apps/api/providers.yaml:/app/providers.yaml
+    depends_on:
+      - mongodb
+      - qdrant
+      - ollama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ==================== MCP SERVERS ====================
+  mcp-fetch:
+    build:
+      context: ./mcp_servers/fetch
+      dockerfile: Dockerfile
+    container_name: mcp-fetch
+    expose:
+      - "8001"
+    restart: unless-stopped
+
+  # ==================== DATABASES ====================
+  mongodb:
+    image: mongo:6
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./data/mongo:/data/db
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"  # GRPC
+    volumes:
+      - ./data/qdrant:/qdrant/storage
+    restart: unless-stopped
+
+  # ==================== AI SERVICES ====================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./data/ollama:/root/.ollama
+    restart: unless-stopped
+
+networks:
+  default:
+    name: enterprise-rag-network
