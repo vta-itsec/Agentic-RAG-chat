@@ -11,7 +11,50 @@ git add .
 git commit -m "Commit"
 # 4. Pull lần nữa để tránh xung đột
 git pull origin main
+git push -u origin feature/saas-refactor
 # 5. Push lên remote
 git push origin main
 
 git pull origin main --allow-unrelated-histories # Chạy lệnh Pull với cờ cho phép hợp nhất lịch sử
+
+óm tắt những gì đã làm:
+✅ Completed:
+Docker Compose mới (docker-compose.yml):
+
+Cấu trúc SaaS với network riêng
+5 services: LibreChat, API, MongoDB, Qdrant, Ollama
+Volume mounts đúng từ root project
+Health checks cho tất cả services
+Network aliases để fix DNS resolution
+LibreChat config mới (librechat.yaml):
+
+Endpoint "Enterprise RAG" kết nối http://api:8000/api/v1
+Models: deepseek-chat, deepseek-reasoner
+Built-in tool: search_internal_documents
+File upload configuration
+README.md với hướng dẫn đầy đủ:
+
+Cách chạy hệ thống
+Test endpoints
+Troubleshooting
+Architecture diagram
+Fix code issues:
+
+requirements.txt: pytest version conflict → 7.4.4
+config.py: CORS_ORIGINS parsing → string với property
+main.py: Use settings.cors_origins_list
+API service đã chạy thành công:
+
+✅ Health: http://localhost:8000/api/v1/health
+✅ Models: Returns deepseek-chat & deepseek-reasoner
+✅ OpenAPI docs: http://localhost:8000/docs
+📝 Next Steps (nếu cần):
+Kiểm tra LibreChat UI: http://localhost:3080
+Test chat với DeepSeek
+Upload documents và test RAG
+Commit changes:
+Optional improvements:
+Implement RAG service (src/services/rag_service.py)
+Add Redis for caching
+Setup monitoring (Prometheus + Grafana)
+Create Kubernetes manifests

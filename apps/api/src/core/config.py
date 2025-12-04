@@ -5,7 +5,7 @@ Centralized configuration management using Pydantic Settings
 """
 from typing import List, Optional
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, field_validator
 
 
 class Settings(BaseSettings):
@@ -30,6 +30,16 @@ class Settings(BaseSettings):
     JWT_EXPIRATION_MINUTES: int = 60
     JWT_REFRESH_SECRET: str = Field(..., env="JWT_REFRESH_SECRET")
     JWT_REFRESH_EXPIRATION_DAYS: int = 30
+    
+    # CORS
+    CORS_ORIGINS: str = Field(
+        default="http://localhost:3080,http://librechat:3080"
+    )
+    
+    @property
+    def cors_origins_list(self) -> List[str]:
+        """Parse CORS_ORIGINS string into list"""
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(',')]
     
     # Database
     MONGO_URI: str = Field(..., env="MONGO_URI")
