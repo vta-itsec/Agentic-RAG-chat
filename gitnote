@@ -1,10 +1,17 @@
-git init
-echo "data/" >> .gitignore
-git status
-git add .
-git commit -m "First commit"
+
 git remote add origin https://github.com/vta-itsec/Agentic-RAG-chat.git
 git branch -M main
 git push -u origin main
+
+# 1. Trước khi sửa: pull code mới nhất
+git pull origin main
+# 2. Sửa file
+# 3. Commit
+git add .
+git commit -m "Commit"
+# 4. Pull lần nữa để tránh xung đột
+git pull origin main
+# 5. Push lên remote
+git push origin main
 
 git pull origin main --allow-unrelated-histories # Chạy lệnh Pull với cờ cho phép hợp nhất lịch sử

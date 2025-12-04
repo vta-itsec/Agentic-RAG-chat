@@ -13,10 +13,12 @@ services:
       - mcp_fetch
     volumes:
       - ./librechat.yaml:/app/librechat.yaml
+      - ./data/librechat:/app/client/public/images
     environment:
       - HOST=0.0.0.0
       - MONGO_URI=mongodb://mongodb:27017/librechat
       - CONFIG_PATH=/app/librechat.yaml
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
 
   # 2. RAG SERVICE (MCP + API Upload)
   rag_api:
@@ -24,12 +26,15 @@ services:
     container_name: rag_api
     ports:
       - "8000:8000" # Mở port để curl upload file từ máy host
+    env_file:
+      - .env  # Load API keys từ .env
     volumes:
       - ./backend/app:/app/app # Hot reload code khi sửa
+      - ./providers.yaml:/app/providers.yaml # Mount providers.yaml
     environment:
       - QDRANT_URL=http://qdrant:6333
       - OLLAMA_BASE_URL=http://ollama:11434
-    # Không cần API Key ở đây nữa vì LibreChat lo việc gọi LLM
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
 
   # 3. FETCH SERVICE (MCP Only)
   mcp_fetch:
