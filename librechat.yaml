@@ -1,0 +1,30 @@
+version: 1.2.1
+cache: true
+
+# 1. Tắt Custom Endpoint (Cái cũ gây lỗi 404)
+interface:
+  endpoints:
+    openRouter: true  # Dùng OpenRouter làm bộ não
+    custom: false
+
+# 2. Định nghĩa Tools (MCP)
+mcpServers:
+  # Tool RAG
+  knowledge-base:
+    url: http://rag_api:8000/sse
+  
+  # Tool Fetch
+  internet-access:
+    url: http://mcp_fetch:8000/sse
+
+# 3. Cấu hình Model
+endpoints:
+  openRouter:
+    apiKey: "${OPENROUTER_API_KEY}"
+    models:
+      default:
+        - "x-ai/grok-4.1-fast:free" # Model này hỗ trợ tool calling tốt
+        - "meta-llama/llama-3.1-70b-instruct"
+        - "deepseek/deepseek-chat"
+      fetch: false
+    titleModel: "x-ai/grok-4.1-fast:free"

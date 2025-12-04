@@ -1,0 +1,21 @@
+  # providers.yaml
+  providers:
+    # 1. OpenRouter (Cho các model xịn nhất)
+    - name: "openrouter"
+      base_url: "https://openrouter.ai/api/v1"
+      api_key_env: "OPENROUTER_API_KEY" # Tên biến môi trường chứa key
+      models: 
+        - "x-ai/grok-4.1-fast:free"
+
+    # # 2. DeepSeek (Cho các tác vụ code/logic giá rẻ)
+    # - name: "deepseek"
+    #   base_url: "https://api.deepseek.com/v1"
+    #   api_key_env: "DEEPSEEK_API_KEY"
+    #   models:
+    #     - "deepseek-chat"
+
+  # # 3. Local vLLM (Cho dữ liệu mật, chạy nội bộ)
+  # - name: "local_gpu"
+  #   base_url: "http://192.168.1.100:8000/v1" # IP máy chứa GPU
+  #   api_key_env: "LOCAL_API_KEY" # Thường là "EMPTY"
+  #   prefix: "local-" # Model tên local-llama3, local-qwen...
