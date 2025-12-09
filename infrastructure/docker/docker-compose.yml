@@ -83,7 +83,7 @@ services:
   
   # MongoDB - Application & User Database
   mongodb:
-    image: mongo:7
+    image: mongo:5
     container_name: mongodb
     hostname: mongodb
     ports:
@@ -99,7 +99,7 @@ services:
           - mongo
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
