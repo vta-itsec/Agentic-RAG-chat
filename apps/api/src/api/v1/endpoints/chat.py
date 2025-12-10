@@ -1,8 +1,9 @@
 """
 Chat Endpoints
 
-Streaming chat completions with RAG and tool support
+Streaming chat completions with RAG and tool support using DeepSeek function calling
 """
+import json
 import logging
 from typing import List, Optional
 
@@ -38,10 +39,73 @@ class ChatRequest(BaseModel):
     tools: Optional[List[Tool]] = None
 
 
+def _get_rag_tools() -> List[dict]:
+    """Define RAG function calling tools for DeepSeek"""
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": "search_knowledge_base",
+                "description": "Search the company's internal knowledge base for information about policies, procedures, guidelines, and documentation. Use this when users ask about company-related information in any language (English, Vietnamese, etc.)",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "The search query in the user's original language"
+                        },
+                        "top_k": {
+                            "type": "integer",
+                            "description": "Number of results to return (default: 3)",
+                            "minimum": 1,
+                            "maximum": 10
+                        }
+                    },
+                    "required": ["query"],
+                    "additionalProperties": False
+                }
+            }
+        }
+    ]
+
+
+async def _execute_tool_call(tool_name: str, tool_args: dict) -> str:
+    """Execute RAG tool calls"""
+    if tool_name == "search_knowledge_base":
+        rag_service = RAGService()
+        query = tool_args.get("query", "")
+        top_k = tool_args.get("top_k", 3)
+        
+        logger.info(f"Searching KB: query='{query}', top_k={top_k}")
+        
+        results = await rag_service.search(
+            query=query,
+            limit=top_k,
+            score_threshold=0.5
+        )
+        
+        if not results:
+            return "No relevant information found in the knowledge base."
+        
+        # Format results for LLM
+        formatted = []
+        for i, doc in enumerate(results, 1):
+            formatted.append(
+                f"Document {i} (relevance: {doc['score']:.2f}):\n"
+                f"Title: {doc.get('title', 'Unknown')}\n"
+                f"Content: {doc.get('content', '')}\n"
+                f"Source: {doc.get('source', 'Unknown')}"
+            )
+        
+        return "\n\n".join(formatted)
+    
+    return f"Unknown tool: {tool_name}"
+
+
 @router.post("/completions")
 async def chat_completions(request: ChatRequest):
     """
-    Stream chat completions with optional RAG and tools
+    Stream chat completions with DeepSeek function calling for RAG
     
     - **model**: Model name (e.g., deepseek-chat)
     - **messages**: Conversation history
@@ -57,22 +121,108 @@ async def chat_completions(request: ChatRequest):
         # Initialize services
         llm_service = LLMService()
         
-        # Get LLM response with streaming
-        stream = await llm_service.chat_completion(
+        # Convert request messages to dict format
+        messages = [msg.dict() for msg in request.messages]
+        
+        # Add RAG tools to request
+        rag_tools = _get_rag_tools()
+        all_tools = rag_tools + ([tool.dict() for tool in request.tools] if request.tools else [])
+        
+        logger.info(f"Using {len(all_tools)} tools (including RAG)")
+        
+        # First LLM call - let it decide if it needs RAG
+        first_response = await llm_service.chat_completion_with_tools(
             model=request.model,
-            messages=[msg.dict() for msg in request.messages],
+            messages=messages,
             temperature=request.temperature,
-            tools=[tool.dict() for tool in request.tools] if request.tools else None,
-            stream=request.stream,
+            tools=all_tools,
+            stream=False,  # Need full response to check tool calls
         )
         
-        return StreamingResponse(
-            stream,
-            media_type="text/event-stream",
-        )
+        # Check if LLM wants to call RAG tool
+        if first_response.get("tool_calls"):
+            logger.info(f"LLM requested {len(first_response['tool_calls'])} tool calls")
+            
+            # Execute tool calls
+            messages.append({
+                "role": "assistant",
+                "content": first_response.get("content"),
+                "tool_calls": first_response["tool_calls"]
+            })
+            
+            for tool_call in first_response["tool_calls"]:
+                tool_name = tool_call["function"]["name"]
+                tool_args = json.loads(tool_call["function"]["arguments"])
+                
+                logger.info(f"Executing: {tool_name}({tool_args})")
+                
+                tool_result = await _execute_tool_call(tool_name, tool_args)
+                
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call["id"],
+                    "content": tool_result
+                })
+            
+            # Second LLM call with tool results - always stream
+            stream = llm_service.chat_completion(
+                model=request.model,
+                messages=messages,
+                temperature=request.temperature,
+                tools=None,  # Don't need tools in second call
+                stream=True,  # Always stream final response
+            )
+            
+            return StreamingResponse(
+                stream,
+                media_type="text/event-stream",
+            )
+        else:
+            # No tool calls needed - check if stream requested
+            logger.info("No tool calls needed, direct response")
+            
+            if request.stream:
+                # Convert non-streaming response to streaming format
+                async def stream_wrapper():
+                    content = first_response.get("content", "")
+                    if content:
+                        data = {
+                            "id": "chatcmpl-" + str(hash(content))[:8],
+                            "object": "chat.completion.chunk",
+                            "created": int(__import__('time').time()),
+                            "model": request.model,
+                            "choices": [{
+                                "index": 0,
+                                "delta": {"content": content},
+                                "finish_reason": "stop"
+                            }]
+                        }
+                        yield f"data: {json.dumps(data)}\n\n"
+                    yield "data: [DONE]\n\n"
+                
+                return StreamingResponse(
+                    stream_wrapper(),
+                    media_type="text/event-stream",
+                )
+            else:
+                # Return non-streaming response
+                return {
+                    "id": "chatcmpl-" + str(hash(first_response.get("content", "")))[:8],
+                    "object": "chat.completion",
+                    "created": int(__import__('time').time()),
+                    "model": request.model,
+                    "choices": [{
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": first_response.get("content", "")
+                        },
+                        "finish_reason": "stop"
+                    }]
+                }
         
     except Exception as e:
-        logger.error(f"Chat completion error: {e}")
+        logger.error(f"Chat completion error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

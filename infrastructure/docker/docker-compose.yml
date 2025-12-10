@@ -15,6 +15,7 @@ services:
     volumes:
       - ./librechat.yaml:/app/librechat.yaml
       - ../../data/librechat:/app/client/public/images
+      - /var/run/docker.sock:/var/run/docker.sock  # Enable docker exec for MCP
     environment:
       - HOST=0.0.0.0
       - MONGO_URI=mongodb://mongodb:27017/librechat
@@ -76,6 +77,25 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  # MCP Server - RAG Document Search (FastMCP with SSE)
+  mcp-rag:
+    build:
+      context: ../../services/mcp-server
+      dockerfile: Dockerfile
+    image: mcp-rag-server:latest
+    container_name: mcp-rag-server
+    ports:
+      - "5173:5173"  # FastMCP SSE endpoint
+    environment:
+      - API_BASE_URL=http://api:8000/api/v1
+      - PORT=5173
+    depends_on:
+      - api
+    networks:
+      - enterprise-chat
+    restart: unless-stopped
+    command: python -m src.sse_server_v2
 
   # ============================================
   # DATA INFRASTRUCTURE

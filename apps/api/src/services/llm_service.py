@@ -138,28 +138,86 @@ class LLMService:
         
         yield "data: [DONE]\n\n"
     
-    def _get_builtin_tools(self) -> List[Dict]:
-        """Get built-in function calling tools"""
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": "search_internal_documents",
-                    "description": (
-                        "Search for information in the internal company knowledge base. "
-                        "Use this when asked about company documents, employees, policies, "
-                        "or any uploaded files."
-                    ),
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "query": {
-                                "type": "string",
-                                "description": "The search query to find relevant information"
-                            }
-                        },
-                        "required": ["query"]
+    async def chat_completion_with_tools(
+        self,
+        model: str,
+        messages: List[Dict],
+        temperature: float = 0.7,
+        tools: Optional[List[Dict]] = None,
+        stream: bool = False,
+    ) -> Dict:
+        """
+        Create chat completion with tools (non-streaming for tool call detection)
+        
+        Args:
+            model: Model name
+            messages: Chat messages
+            temperature: Sampling temperature
+            tools: Function calling tools
+            stream: Must be False for this method
+            
+        Returns:
+            Complete response with potential tool_calls
+        """
+        provider = self._get_provider_for_model(model)
+        if not provider:
+            raise ValueError(f"No provider found for model: {model}")
+        
+        # Get API key from environment
+        api_key_env = provider["api_key_env"]
+        api_key = getattr(settings, api_key_env, None)
+        
+        if not api_key:
+            raise ValueError(f"API key not found for provider: {provider['name']}")
+        
+        logger.info(f"Using provider: {provider['name']}, model: {model} (with tools)")
+        
+        # Create OpenAI client
+        client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=provider["base_url"],
+        )
+        
+        # Prepare request parameters
+        params = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "stream": False,
+        }
+        
+        if tools:
+            params["tools"] = tools
+            logger.info(f"Added {len(tools)} tools to request")
+        
+        # Call API
+        response = await client.chat.completions.create(**params)
+        
+        # Extract response
+        message = response.choices[0].message
+        
+        result = {
+            "content": message.content,
+            "role": message.role,
+        }
+        
+        # Include tool calls if present
+        if message.tool_calls:
+            result["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": tc.type,
+                    "function": {
+                        "name": tc.function.name,
+                        "arguments": tc.function.arguments
                     }
                 }
-            }
-        ]
+                for tc in message.tool_calls
+            ]
+            logger.info(f"Response includes {len(message.tool_calls)} tool calls")
+        
+        return result
+    
+    def _get_builtin_tools(self) -> List[Dict]:
+        """Get built-in function calling tools"""
+        return []  # Removed built-in tools, use explicit tools from endpoint

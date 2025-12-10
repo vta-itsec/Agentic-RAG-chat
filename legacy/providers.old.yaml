@@ -1,9 +1,0 @@
-  # providers.yaml
-  providers:
-    # 1. DeepSeek (Primary provider)
-    - name: "deepseek"
-      base_url: "https://api.deepseek.com/v1"
-      api_key_env: "DEEPSEEK_API_KEY"
-      models: 
-        - "deepseek-chat"
-        - "deepseek-reasoner"
